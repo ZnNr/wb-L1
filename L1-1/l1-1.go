@@ -15,17 +15,17 @@ type Human struct {
 	Gender string
 }
 
-// Метод для структуры Human
-func (h *Human) Speak() {
+// Метод для структуры Human, метод представляет чела
+func (h *Human) Introduce() {
 	fmt.Printf("Меня зовут %s. Мне %d лет, и я %s.\n", h.Name, h.Age, h.Gender)
 }
 
 func (h *Human) CelebrateBirthday() {
 	h.Age++
-	fmt.Printf("Сегодня мой день рождения! Мне теперь %d лет.\n", h.Age)
+	fmt.Printf("Сегодня мой день рождения! Теперь мне %d лет.\n", h.Age)
 }
 
-// Определяем структуру Action, которая включает в себя Human
+// Определяем структуру Action, которая включает (встраивает) в себя Human
 type Action struct {
 	Human
 	Activity string
@@ -37,16 +37,16 @@ func (a *Action) Perform() {
 }
 
 func main() {
-	// Создаем экземпляр Human
-	person := Human{Name: "Анна", Age: 30, Gender: "женщина"}
-	person.Speak()
+	// экземпляр Human
+	person := Human{Name: "Полина", Age: 30, Gender: "женщина"}
+	person.Introduce()
 	person.CelebrateBirthday()
 
-	// Создаем экземпляр Action
+	// экземпляр Action
 	action := Action{
-		Human:    Human{Name: "Иван", Age: 25, Gender: "мужчина"},
-		Activity: "бегает",
+		Human:    Human{Name: "Джонни", Age: 25, Gender: "мужчина"},
+		Activity: "пресс качать",
 	}
-	action.Speak() // Используем метод из встроенной структуры Human
-	action.Perform()
+	action.Introduce() // Вызываем метод Introduce структуры Action (унаследованный из Human)
+	action.Perform()   // Вызываем метод Execute структуры Action
 }

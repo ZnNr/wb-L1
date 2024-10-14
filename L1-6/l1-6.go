@@ -33,7 +33,7 @@ func workerWithContext(ctx context.Context) {
 			fmt.Println("Горутина с контекстом остановлена")
 			return
 		default:
-			fmt.Println("Работаю с контекстом...")
+			fmt.Println("Что то делаю с контекстом...")
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -48,7 +48,7 @@ func workerWithWaitGroup(wg *sync.WaitGroup, stop chan bool) {
 			fmt.Println("Горутина с WaitGroup остановлена")
 			return
 		default:
-			fmt.Println("Работаю с WaitGroup...")
+			fmt.Println("Турум пум пум WaitGroup...")
 			time.Sleep(1 * time.Second)
 		}
 	}
@@ -57,7 +57,7 @@ func workerWithWaitGroup(wg *sync.WaitGroup, stop chan bool) {
 // Горутина с использованием флага
 func workerWithFlag(running *bool) {
 	for *running {
-		fmt.Println("Работаю с флагом...")
+		fmt.Println("Махаю флагом...")
 		time.Sleep(1 * time.Second)
 	}
 	fmt.Println("Горутина с флагом остановлена")

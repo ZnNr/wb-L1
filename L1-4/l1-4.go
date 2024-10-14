@@ -5,22 +5,24 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
 )
 
-//Реализовать постоянную запись данных в канал (главный поток).
-//Реализовать набор из N воркеров, которые читают
-//произвольные данные из канала и выводят в stdout.
-//Необходима возможность выбора количества воркеров при старте.
-//
-//
-//Программа должна завершаться по нажатию Ctrl+C.
-//Выбрать и обосновать способ завершения работы всех воркеров..
+/*
+Реализовать постоянную запись данных в канал (главный поток).
+Реализовать набор из N воркеров, которые читают
+произвольные данные из канала и выводят в stdout.
+Необходима возможность выбора количества воркеров при старте.
 
-// Функция receive генерирует последовательные числа и отправляет их в канал ingest.
+
+Программа должна завершаться по нажатию Ctrl+C.
+Выбрать и обосновать способ завершения работы всех воркеров..
+*/
+
+// Функция receive отправляет целые числа в канал ingest с задержкой 100 мс между отправками.
+// Цель - Вечный цикл будет генерировать последовательные целые числа.
 func receive(ingest chan<- int) {
 	defer close(ingest) // Закрываем канал после завершения работы функции
 	i := 0
@@ -31,68 +33,66 @@ func receive(ingest chan<- int) {
 	}
 }
 
-// Функция starting читает числа из канала ingest и передает их в канал jobs для обработки воркерами.
-func starting(ctx context.Context, ingest <-chan int, jobs chan<- int, wg *sync.WaitGroup) {
-	defer wg.Done() // Уменьшаем счетчик WaitGroup при завершении функции
+// Функция starting принимает данные из канала ingest и пересылает их в канал jobs.
+// Если контекст завершен, то закрываем канал jobs и прекращаем выполнение.
+// цель функции - Пересылка данных из канала ingest в канал jobs с учетом контекста завершения.
+func starting(ctx context.Context, jobs chan int, ingest chan int) {
 	for {
 		select {
-		case num, ok := <-ingest: // Читаем данные из канала ingest
-			if !ok { // Если канал закрыт
-				return // Выход из функции
-			}
-			jobs <- num // Отправляем число в канал jobs
-		case <-ctx.Done(): // Проверяем, был ли вызван контекст cancel
-			return // Выход из функции при завершении контекста
+		case job := <-ingest:
+			jobs <- job // Читаем данные из канала ingest
+		case <-ctx.Done(): // Передаем данные из канала ingest в канал jobs.
+			fmt.Println("closing jobs")
+			close(jobs) // Закрываем канал jobs, если контекст завершен.
+			fmt.Println("closed jobs")
+			return
 		}
 	}
 }
 
-// Функция worker обрабатывает числа из канала jobs.
-func worker(jobs <-chan int, wg *sync.WaitGroup) {
-	defer wg.Done()         // Уменьшаем счетчик WaitGroup при завершении функции
-	for num := range jobs { // Перебираем все числа в канале jobs
-		fmt.Println("Processed:", num) // Выводим обработанное число
-		time.Sleep(1 * time.Second)    // Эмуляция обработки (пауза в 1 секунду)
+// Функция worker обрабатывает задания из канала jobs.
+// После завершения работы (пустой канал) выводит сообщение о прерывании.
+func worker(id int, wg *sync.WaitGroup, jobs chan int) {
+	defer wg.Done() // Уменьшаем счетчик горутины по завершении.
+	for j := range jobs {
+		fmt.Printf("Worker %d processed job %d\n", id, j)
+		time.Sleep(time.Second) // Имитируем обработку задания.
 	}
+	fmt.Printf("Worker %d interrupted\n", id)
 }
-
-// Основная функция, запускающая всех воркеров и управляемая контекстом.
 func main() {
-	if len(os.Args) < 2 { // Проверка наличия аргументов командной строки
-		fmt.Println("Please provide the number of workers") // Сообщение об ошибке при отсутствии аргументов
+	var numWorkers int
+	fmt.Print("Please provide the number of workers: ")
+
+	// Пользователь задает количество воркеров.
+	if _, err := fmt.Scan(&numWorkers); err != nil || numWorkers < 1 {
+		fmt.Println("Invalid number of workers")
 		return
 	}
-	workerCount, err := strconv.Atoi(os.Args[1]) // Преобразование аргумента в целое число
-	if err != nil || workerCount <= 0 {          // Проверка на корректность числа воркеров
-		fmt.Println("Invalid number of workers") // Сообщение об ошибке
-		return
+
+	var wg sync.WaitGroup
+	sigs := make(chan os.Signal, 1)
+	ingest := make(chan int, 1)
+	jobs := make(chan int, 100)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Функция signal.Notify регистрирует получение сигналов SIGINT и SIGTERM.
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	// Запуск горутин для приема и распределения заданий.
+	//Функции receive и starting запускаются как отдельные горутины.
+	go receive(ingest)
+	go starting(ctx, jobs, ingest)
+
+	// Запуск указанного пользователем количества воркеров.
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go worker(i, &wg, jobs)
 	}
 
-	ingest := make(chan int) // Канал для отправки данных
-	jobs := make(chan int)   // Канал для обработки данных
-	var wg sync.WaitGroup    // WaitGroup для ожидания завершения всех горутин
-
-	ctx, cancel := context.WithCancel(context.Background()) // Создание контекста для управления задержкой завершения
-
-	go receive(ingest) // Запуск функции receive как горутины
-
-	wg.Add(1)                           // Увеличиваем счетчик WaitGroup для функции starting
-	go starting(ctx, ingest, jobs, &wg) // Запуск функции starting как горутины
-
-	for i := 0; i < workerCount; i++ { // Запуск указанного количества воркеров
-		wg.Add(1)            // Увеличиваем счетчик WaitGroup для каждого воркера
-		go worker(jobs, &wg) // Запуск функции worker как горутины
-	}
-
-	// Настройка канала для обнаружения сигналов завершения
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-
-	<-signalChan // Ожидание сигнала завершения
-	cancel()     // Отменяем контекст для уведомления воркеров о завершении
-
-	close(jobs) // Закрываем канал jobs, чтобы оповестить воркеров о завершении
-
-	wg.Wait()                                              // Ждем завершения всех воркеров
-	fmt.Println("All workers have completed their tasks.") // Финальное сообщение
+	// Блокируем основной поток до получения сигнала завершения.
+	<-sigs    //Программа ждет получения сигнала SIGINT или SIGTERM для завершения всех процессов.
+	cancel()  // Отмена контекста, что завершает работу функции starting.
+	wg.Wait() // Ожидание завершения всех воркеров.
+	fmt.Println("All workers have completed their tasks.")
 }
